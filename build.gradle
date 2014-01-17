@@ -13,6 +13,12 @@ dependencies {
   compile 'com.google.guava:guava:15.0'
   compile 'com.google:bitcoinj:0.10.3'
   compile 'org.bouncycastle:bcprov-jdk16:1.46'
+  testCompile 'org.testng:testng:6.8.7'
+}
+
+test {
+   useTestNG()
+
 }
 
 apply plugin:'application'

@@ -8,9 +8,9 @@ A Java implementation of the BIP-0038 Draft: [Passphrase-protected private key](
 If you don't care about lot/sequence (if you don't know what they are, you don't care),
    just use -1 for the lot. That will cause those parameters to be ignored.
 
-   `BIP38.decrypt(password, encrypted key)` yields the decrypted get.
+`BIP38.encryptNoEC(password, encodedKey, isCompressed)` encrypts a known key.
 
-   Currently only encryptEC and decryptEC have been tested (and barely).
+`BIP38.decrypt(password, encryptedKey)` yields the decrypted get.
 
 ## Example:
 
@@ -36,9 +36,13 @@ If you don't care about lot/sequence (if you don't know what they are, you don't
 
 ## To do
 
-   * implement the remaining functionality from the spec (e.g. generate compressed keys)
-  * write some tests.
-  * make the code cleaner.
+  * implement the remaining functionality from the spec.
+  * write more tests.
+
+## Note for OSX
+
+If you get an exception about an illegal key size, you probably need to install
+the [Unlimited Strength Jurisdiction Policy Files](http://www.oracle.com/technetwork/java/javase/downloads/jce-7-download-432124.html)
 
 ## Tips
 

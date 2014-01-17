@@ -183,12 +183,12 @@ public class BIP38 {
     public static String decrypt(String password, String encryptedKey) throws
             AddressFormatException, GeneralSecurityException, UnsupportedEncodingException {
         byte[] encryptedKeyBytes = Base58.decode(encryptedKey);
-        int l = encryptedKeyBytes.length;
         String result;
-        switch (l) {
-            case 43: result = decryptEC(password, encryptedKeyBytes);
+        byte ec = encryptedKeyBytes[1];
+        switch (ec) {
+            case 0x43: result = decryptEC(password, encryptedKeyBytes);
                 break;
-            case 53: result = decryptNoEC(password, encryptedKeyBytes);
+            case 0x42: result = decryptNoEC(password, encryptedKeyBytes);
                 break;
             default: throw new RuntimeException("Invalid Key");
         }
@@ -264,24 +264,26 @@ public class BIP38 {
     }
 
     /**
-     * Encrypts a key without using EC multiplication. - UNTESTED, probably doesn't work.
+     * Encrypts a key without using EC multiplication.
      * @param encodedPrivateKey
      * @param password
      * @param compressed
-     * @param params
      * @return
      * @throws GeneralSecurityException
      * @throws UnsupportedEncodingException
      * @throws AddressFormatException
      */
-    public static String encryptNoEC(String encodedPrivateKey, String password, boolean compressed, NetworkParameters params)
+    public static String encryptNoEC(String encodedPrivateKey, String password, boolean isCompressed)
             throws GeneralSecurityException, UnsupportedEncodingException, AddressFormatException {
 
-        byte[] keyBytes = Base58.decode(encodedPrivateKey);
-        ECKey key = new ECKey(keyBytes, null);
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        byte[] d1 = digest.digest(key.toAddress(params).getHash160());
-        byte[] hash = digest.digest(d1);
+        DumpedPrivateKey dk = new DumpedPrivateKey(MainNetParams.get(), encodedPrivateKey);
+
+        ECKey key = dk.getKey();
+        System.out.println(key.getPrivateKeyEncoded(MainNetParams.get()));
+        byte[] keyBytes = key.getPrivKeyBytes();
+        String address = key.toAddress(MainNetParams.get()).toString();
+        byte[] tmp = address.getBytes("ASCII");
+        byte[] hash = Utils.doubleHash(tmp, 0, tmp.length);
         byte[] addressHash = Arrays.copyOfRange(hash, 0, 4);
         byte[] scryptKey = SCrypt.scrypt(password.getBytes("UTF8"), addressHash, 16384, 8, 8, 64);
         byte[] derivedHalf1 = Arrays.copyOfRange(scryptKey, 0, 32);
@@ -293,30 +295,51 @@ public class BIP38 {
             k1[i] = (byte) (keyBytes[i] ^ derivedHalf1[i]);
             k2[i] = (byte) (keyBytes[i+16] ^ derivedHalf1[i+16]);
         }
-        Cipher cipher = Cipher.getInstance ("AES/ECB/NoPadding", "BC");
-        Key aesKey1 = new SecretKeySpec(k1, "AES");
-        Key aesKey2 = new SecretKeySpec(k2, "AES");
 
-        cipher.init(Cipher.ENCRYPT_MODE, aesKey1);
-        byte[] encryptedHalf1 = cipher.doFinal(derivedHalf2);
-        cipher.init(Cipher.ENCRYPT_MODE, aesKey2);
-        byte[] encryptedHalf2 = cipher.doFinal(derivedHalf2);
+        Cipher cipher = Cipher.getInstance ("AES/ECB/NoPadding", "BC");
+        Key aesKey = new SecretKeySpec(derivedHalf2, "AES");
+
+        cipher.init(Cipher.ENCRYPT_MODE, aesKey);
+        byte[] encryptedHalf1 = cipher.doFinal(k1);
+        byte[] encryptedHalf2 = cipher.doFinal(k2);
 
         byte[] encryptedPrivateKey = new byte[43];
         encryptedPrivateKey[0] = 0x01;
         encryptedPrivateKey[1] = 0x42;
-        encryptedPrivateKey[2] = (byte) (compressed ? 0xe0 : 0xc0);
+        encryptedPrivateKey[2] = (byte) (isCompressed ? 0xe0 : 0xc0);
         System.arraycopy(addressHash, 0, encryptedPrivateKey, 3, 4);
         System.arraycopy(encryptedHalf1, 0, encryptedPrivateKey, 7, 16);
         System.arraycopy(encryptedHalf2, 0, encryptedPrivateKey, 23, 16);
-        System.arraycopy(addressHash, 0, encryptedPrivateKey, 39, 4);
+        byte[] checksum = Utils.doubleHash(encryptedPrivateKey, 0, 39);
+        System.arraycopy(checksum, 0, encryptedPrivateKey, 39, 4);
 
         return Base58.encode(encryptedPrivateKey);
     }
 
 
-    public static String decryptNoEC(String password, byte[] encryptedKey) {
-        throw new RuntimeException("not implemented yet");
+    public static String decryptNoEC(String password, byte[] encryptedKey) throws UnsupportedEncodingException, GeneralSecurityException{
+
+        byte[] addressHash =  Arrays.copyOfRange(encryptedKey, 3, 7);
+        byte[] scryptKey = SCrypt.scrypt(password.getBytes("UTF8"), addressHash, 16384, 8, 8, 64);
+        byte[] derivedHalf1 = Arrays.copyOfRange(scryptKey, 0, 32);
+        byte[] derivedHalf2 = Arrays.copyOfRange(scryptKey, 32, 64);
+
+        Cipher cipher = Cipher.getInstance ("AES/ECB/NoPadding", "BC");
+        Key aesKey = new SecretKeySpec(derivedHalf2, "AES");
+        cipher.init(Cipher.DECRYPT_MODE, aesKey);
+        byte[] encryptedHalf1 = Arrays.copyOfRange(encryptedKey, 7, 23);
+        byte[] encryptedHalf2 = Arrays.copyOfRange(encryptedKey, 23, 39);
+        byte[] k1 = cipher.doFinal(encryptedHalf1);
+        byte[] k2 = cipher.doFinal(encryptedHalf2);
+
+        byte[] keyBytes = new byte[32];
+        for (int i = 0; i < 16; i++) {
+            keyBytes[i] = (byte) (k1[i] ^ derivedHalf1[i]);
+            keyBytes[i+16] = (byte) (k2[i] ^ derivedHalf1[i+16]);
+        }
+        boolean compressed = (keyBytes[2] & (byte)0xe0) == 0;
+        ECKey k = new ECKey(new BigInteger(1, keyBytes), null, compressed);
+        return k.getPrivateKeyEncoded(MainNetParams.get()).toString();
     }
 
     // generate a key, decrypt it, print the decrypted key and the address.
