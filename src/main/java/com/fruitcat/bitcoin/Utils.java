@@ -20,6 +20,10 @@ package com.fruitcat.bitcoin;
 import com.google.bitcoin.core.Base58;
 import org.bouncycastle.math.ec.ECPoint;
 
+import javax.crypto.Cipher;
+import javax.crypto.spec.SecretKeySpec;
+import java.security.GeneralSecurityException;
+import java.security.Key;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
@@ -60,16 +64,6 @@ public class Utils {
         return r.digest(sha.digest(data));
     }
 
-    //for debugging
-    protected static void pb(String name, byte [] x) {
-        System.out.print(name + ": ");
-        for (byte b : x) {
-            int l = b >= 0 ? b : 256 + b;
-            System.out.print(l + " ");
-        }
-        System.out.println();
-    }
-
     /**
      * Appends a Bitcoin-style checksum to a byte array and encodes the result as Base58.
      * @param b a byte array
@@ -82,5 +76,63 @@ public class Utils {
         System.arraycopy(b, 0, r, 0, b.length);
         System.arraycopy(doubleHash(b, 0, b.length), 0, r, b.length, 4);
         return Base58.encode(r);
+    }
+
+    /**
+     * Encrypts plaintext with AES
+     * @param plaintext
+     * @param key
+     * @return
+     * @throws GeneralSecurityException
+     */
+    public static byte[] AESEncrypt(byte[] plaintext, byte[] key) throws GeneralSecurityException {
+        Cipher cipher = Cipher.getInstance("AES/ECB/NoPadding", "BC");
+        Key aesKey = new SecretKeySpec(key, "AES");
+        cipher.init(Cipher.ENCRYPT_MODE, aesKey);
+        return cipher.doFinal(plaintext);
+    }
+
+    /**
+     * Decrypts ciphertext with AES
+     * @param ciphertext
+     * @param key
+     * @return
+     * @throws GeneralSecurityException
+     */
+    public static byte[] AESDecrypt(byte[] ciphertext, byte[] key) throws GeneralSecurityException {
+        Cipher cipher = Cipher.getInstance("AES/ECB/NoPadding", "BC");
+        Key aesKey = new SecretKeySpec(key, "AES");
+        cipher.init(Cipher.DECRYPT_MODE, aesKey);
+        return cipher.doFinal(ciphertext);
+    }
+
+    /**
+     * Concatenates many arrays of bytes into one.
+     * @param buffers
+     * @return
+     */
+    public static byte[] concat(byte[]... buffers) {
+        int l = 0;
+        for (byte [] b : buffers) {
+            l += b.length;
+        }
+        byte[] ret = new byte[l];
+        int off = 0;
+        for (byte [] b : buffers) {
+            System.arraycopy(b, 0, ret, off, b.length);
+            off += b.length;
+        }
+
+        return ret;
+    }
+
+    //for debugging
+    protected static void pb(String name, byte [] x) {
+        System.out.print(name + ": ");
+        for (byte b : x) {
+            int l = b >= 0 ? b : 256 + b;
+            System.out.print(l + " ");
+        }
+        System.out.println();
     }
 }

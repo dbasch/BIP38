@@ -28,13 +28,13 @@ import org.bouncycastle.asn1.sec.SECNamedCurves;
 import org.bouncycastle.asn1.x9.X9ECParameters;
 import org.bouncycastle.math.ec.ECPoint;
 
-import javax.crypto.Cipher;
-import javax.crypto.spec.SecretKeySpec;
 import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.security.*;
+import java.security.GeneralSecurityException;
+import java.security.SecureRandom;
+import java.security.Security;
 import java.util.Arrays;
 
 public class BIP38 {
@@ -58,19 +58,19 @@ public class BIP38 {
     public static String generateEncryptedKey(String password) throws UnsupportedEncodingException, GeneralSecurityException, AddressFormatException {
 
         byte[] intermediate = Arrays.copyOfRange(Base58.decode(intermediatePassphrase(password, -1, -1)), 0, 53);
-        return encryptedKeyFromIntermediate(intermediate, -1);
+        return encryptedKeyFromIntermediate(intermediate).key;
     }
 
     /**
-     * if lot is less than 0, lot and sequence are ignored.
+     * Generates a private key from an intermediate passphrase.
+     *
      * @param intermediate
-     * @param lot
      * @return
      * @throws GeneralSecurityException
      */
-    public static String encryptedKeyFromIntermediate(byte[] intermediate, int lot) throws GeneralSecurityException {
+    public static GeneratedKey encryptedKeyFromIntermediate(byte[] intermediate) throws GeneralSecurityException {
 
-        byte flagByte = (lot > 0) ? (byte) 4 : (byte) 0; //uncompressed
+        byte flagByte = (0x51 == intermediate[7]) ? (byte) 4 : (byte) 0; //uncompressed
         byte[] ownerEntropy = new byte[8];
         byte[] passPoint = new byte[33];
         System.arraycopy(intermediate, 8, ownerEntropy, 0, 8);
@@ -86,9 +86,7 @@ public class BIP38 {
         byte[] add = new Address(MainNetParams.get(), generatedAddress).toString().getBytes();
         byte[] addressHash = Utils.doubleHash(add, 0, add.length);
 
-        byte[] salt = new byte[12];
-        System.arraycopy(addressHash, 0, salt, 0, 4);
-        System.arraycopy(ownerEntropy, 0, salt, 4, 8);
+        byte[] salt = Utils.concat(addressHash, ownerEntropy);
         byte[] secondKey = SCrypt.scrypt(passPoint, salt, 1024, 1, 1, 64);
         byte[] derivedHalf1 = Arrays.copyOfRange(secondKey, 0, 32);
         byte[] derivedHalf2 = Arrays.copyOfRange(secondKey, 32, 64);
@@ -100,27 +98,45 @@ public class BIP38 {
 
         }
 
-        Cipher cipher = Cipher.getInstance("AES/ECB/NoPadding", "BC");
-        Key aesKey = new SecretKeySpec(derivedHalf2, "AES");
-        cipher.init(Cipher.ENCRYPT_MODE, aesKey);
-        byte[] encryptedPart1 = cipher.doFinal(m1);
+        byte[] encryptedPart1 = Utils.AESEncrypt(m1, derivedHalf2);
         System.arraycopy(encryptedPart1, 8, m2, 0, 8);
         System.arraycopy(seedB, 16, m2, 8, 8);
         for (int i = 0 ; i < 16; i ++) {
             m2[i] = (byte) (m2[i] ^ derivedHalf1[16 + i]);
         }
 
-        byte[] encryptedPart2 = cipher.doFinal(m2);
-        byte[] encryptedPrivateKey = new byte[39];
-        encryptedPrivateKey[0] = 0x01;
-        encryptedPrivateKey[1] = 0x43;
-        encryptedPrivateKey[2] = flagByte;
-        System.arraycopy(addressHash, 0, encryptedPrivateKey, 3, 4);
-        System.arraycopy(ownerEntropy, 0, encryptedPrivateKey, 7, 8);
-        System.arraycopy(encryptedPart1, 0, encryptedPrivateKey, 15, 8);
-        System.arraycopy(encryptedPart2, 0, encryptedPrivateKey, 23, 16);
+        byte[] encryptedPart2 = Utils.AESEncrypt(m2, derivedHalf2);
+        byte[] header = { 0x01, 0x43, flagByte};
 
-        return Utils.base58Check(encryptedPrivateKey);
+        byte[] encryptedPrivateKey = Utils.concat(header, addressHash, ownerEntropy,
+                Arrays.copyOfRange(encryptedPart1, 0, 8), encryptedPart2);
+
+        String key = Utils.base58Check(encryptedPrivateKey);
+        String confirmationCode = confirmation(flagByte, addressHash, ownerEntropy, factorB, derivedHalf1, derivedHalf2);
+        return new GeneratedKey(key, confirmationCode);
+    }
+
+    private static String confirmation(byte flagByte, byte[] addressHash, byte [] ownerEntropy, byte[] factorB, byte[] derivedHalf1, byte[] derivedHalf2)
+            throws GeneralSecurityException {
+        byte[] pointB = CURVE.getG().multiply(new BigInteger(1, factorB)).getEncoded();
+        byte pointBPrefix = (byte) (pointB[0] ^ (derivedHalf2[31] & 1));
+        byte[] m1 = new byte[16];
+        byte[] m2 = new byte[16];
+        for (int i = 0 ; i < 16; i ++) {
+            m1[i] = (byte) (pointB[i] ^ derivedHalf1[i]);
+            m2[i] = (byte) (pointB[16 + i] ^ derivedHalf1[16 + i]);
+        }
+        byte[] pointBx1 = Utils.AESEncrypt(m1, derivedHalf2);
+        byte[] pointBx2 = Utils.AESEncrypt(m2, derivedHalf2);
+        byte[] encryptedPointB = Utils.concat(new byte[] { pointBPrefix }, pointBx1, pointBx2);
+        byte[] header = {(byte) 0x64, (byte) 0x3B, (byte) 0xF6, (byte) 0xA8, (byte) 0x9A, flagByte};
+        byte[] result = Utils.concat(header, addressHash, ownerEntropy, encryptedPointB);
+
+        return Utils.base58Check(result);
+    }
+
+    public boolean verify(String passphrase, String confirmationCode) {
+          return true;
     }
 
     /**
@@ -141,7 +157,6 @@ public class BIP38 {
         byte[] ownerSalt;
         byte[] passPoint;
         byte[] preFactor;
-        byte[] result = new byte[49];
         byte[] magicBytes = { (byte) 0x2c, (byte) (0xe9), (byte) 0xb3, (byte) 0xe1, (byte) 0xff, (byte) 0x39, (byte) 0xe2, (byte) 0x51 };
         byte[] passFactor;
 
@@ -156,9 +171,7 @@ public class BIP38 {
             System.arraycopy(ownerSalt, 0, ownerEntropy, 0, 4);
             System.arraycopy(ls, 0, ownerEntropy, 4, 4);
             preFactor = SCrypt.scrypt(password.getBytes("UTF8"), ownerSalt, 16384, 8, 8, 32);
-            byte[] tmp = new byte[40];
-            System.arraycopy(preFactor, 0, tmp, 0, 32);
-            System.arraycopy(ownerEntropy, 0, tmp, 32, 8);
+            byte[] tmp = Utils.concat(preFactor, ownerEntropy);
             passFactor = Utils.doubleHash(tmp, 0, 40);
 
         } else {
@@ -172,9 +185,7 @@ public class BIP38 {
         ECPoint g = CURVE.getG();
         ECPoint p = Utils.compressPoint(g.multiply(new BigInteger(1, passFactor)));
         passPoint = p.getEncoded();
-        System.arraycopy(magicBytes, 0, result, 0, 8);
-        System.arraycopy(ownerEntropy, 0, result, 8, 8);
-        System.arraycopy(passPoint, 0, result, 16, 33);
+        byte[] result = Utils.concat(magicBytes, ownerEntropy, passPoint);
 
         return Utils.base58Check(result);
     }
@@ -229,6 +240,7 @@ public class BIP38 {
             passFactor = Utils.doubleHash(tmp, 0, 40);
 
         }
+
         byte[] addressHash = Arrays.copyOfRange(encryptedKey, 3, 7);
         ECPoint g = CURVE.getG();
         ECPoint p = Utils.compressPoint(g.multiply(new BigInteger(1, passFactor)));
@@ -241,10 +253,7 @@ public class BIP38 {
         byte[] secondKey = SCrypt.scrypt(passPoint, salt, 1024, 1, 1, 64);
         byte[] derivedHalf1 = Arrays.copyOfRange(secondKey, 0, 32);
         byte[] derivedHalf2 = Arrays.copyOfRange(secondKey, 32, 64);
-        SecretKeySpec aesKey = new SecretKeySpec(derivedHalf2, "AES");
-        Cipher cipher = Cipher.getInstance ("AES/ECB/NoPadding");
-        cipher.init(Cipher.DECRYPT_MODE, aesKey);
-        byte[] m2 = cipher.doFinal(encryptedPart2);
+        byte[] m2 = Utils.AESDecrypt(encryptedPart2, derivedHalf2);
 
         byte[] encryptedPart1 = new byte[16];
         System.arraycopy(encryptedKey, 15, encryptedPart1, 0, 8);
@@ -256,7 +265,7 @@ public class BIP38 {
         }
         System.arraycopy(m2, 0, encryptedPart1, 8, 8);
 
-        byte[] m1 = cipher.doFinal(encryptedPart1);
+        byte[] m1 = Utils.AESDecrypt(encryptedPart1, derivedHalf2);
 
         for (int i = 0; i < 16; i++) {
             seedB[i] = (byte) (m1[i] ^ derivedHalf1[i]);
@@ -281,7 +290,7 @@ public class BIP38 {
      * @throws UnsupportedEncodingException
      * @throws AddressFormatException
      */
-    public static String encryptNoEC(String encodedPrivateKey, String password, boolean isCompressed)
+    public static String encryptNoEC(String password, String encodedPrivateKey, boolean isCompressed)
             throws GeneralSecurityException, UnsupportedEncodingException, AddressFormatException {
 
         DumpedPrivateKey dk = new DumpedPrivateKey(MainNetParams.get(), encodedPrivateKey);
@@ -303,19 +312,18 @@ public class BIP38 {
             k2[i] = (byte) (keyBytes[i+16] ^ derivedHalf1[i+16]);
         }
 
-        Key aesKey = new SecretKeySpec(derivedHalf2, "AES");
-        Cipher cipher = Cipher.getInstance ("AES/ECB/NoPadding", "BC");
-        cipher.init(Cipher.ENCRYPT_MODE, aesKey);
-        byte[] encryptedHalf1 = cipher.doFinal(k1);
-        byte[] encryptedHalf2 = cipher.doFinal(k2);
+        byte[] encryptedHalf1 = Utils.AESEncrypt(k1, derivedHalf2);
+        byte[] encryptedHalf2 = Utils.AESEncrypt(k2, derivedHalf2);
 
-        byte[] encryptedPrivateKey = new byte[39];
-        encryptedPrivateKey[0] = 0x01;
+        //byte[] encryptedPrivateKey = new byte[39];
+        byte[] header = { 0x01, 0x42, (byte) (isCompressed ? 0xe0 : 0xc0) };
+        /*encryptedPrivateKey[0] = 0x01;
         encryptedPrivateKey[1] = 0x42;
         encryptedPrivateKey[2] = (byte) (isCompressed ? 0xe0 : 0xc0);
         System.arraycopy(addressHash, 0, encryptedPrivateKey, 3, 4);
         System.arraycopy(encryptedHalf1, 0, encryptedPrivateKey, 7, 16);
-        System.arraycopy(encryptedHalf2, 0, encryptedPrivateKey, 23, 16);
+        System.arraycopy(encryptedHalf2, 0, encryptedPrivateKey, 23, 16);*/
+        byte[] encryptedPrivateKey = Utils.concat(header, addressHash, encryptedHalf1, encryptedHalf2);
 
         return Utils.base58Check(encryptedPrivateKey);
     }
@@ -335,32 +343,38 @@ public class BIP38 {
         byte[] derivedHalf1 = Arrays.copyOfRange(scryptKey, 0, 32);
         byte[] derivedHalf2 = Arrays.copyOfRange(scryptKey, 32, 64);
 
-        Key aesKey = new SecretKeySpec(derivedHalf2, "AES");
-        Cipher cipher = Cipher.getInstance ("AES/ECB/NoPadding", "BC");
-        cipher.init(Cipher.DECRYPT_MODE, aesKey);
         byte[] encryptedHalf1 = Arrays.copyOfRange(encryptedKey, 7, 23);
         byte[] encryptedHalf2 = Arrays.copyOfRange(encryptedKey, 23, 39);
-        byte[] k1 = cipher.doFinal(encryptedHalf1);
-        byte[] k2 = cipher.doFinal(encryptedHalf2);
-
+        byte[] k1 = Utils.AESDecrypt(encryptedHalf1, derivedHalf2);
+        byte[] k2 = Utils.AESDecrypt(encryptedHalf2, derivedHalf2);
         byte[] keyBytes = new byte[32];
         for (int i = 0; i < 16; i++) {
             keyBytes[i] = (byte) (k1[i] ^ derivedHalf1[i]);
-            keyBytes[i+16] = (byte) (k2[i] ^ derivedHalf1[i+16]);
+            keyBytes[i + 16] = (byte) (k2[i] ^ derivedHalf1[i + 16]);
         }
         boolean compressed = (keyBytes[2] & (byte) 0xe0) == 0;
         ECKey k = new ECKey(new BigInteger(1, keyBytes), null, compressed);
         return k.getPrivateKeyEncoded(MainNetParams.get()).toString();
     }
 
-    // generate a key, decrypt it, print the decrypted key and the address.
+    // command line encryption and decryption.
     public static void main(String args[]) throws Exception {
-        String encryptedKey = generateEncryptedKey("hello");
-        System.out.println("key is:" + encryptedKey);
-        String key = decrypt("hello", encryptedKey);
-        DumpedPrivateKey dk = new DumpedPrivateKey(MainNetParams.get(), key);
-        ECKey k = dk.getKey();
-        String add = k.toAddress(MainNetParams.get()).toString();
-        System.out.println("Key: " + key + "\nAddress:" + add);
+        switch(args.length) {
+            case 3:
+                if (args[0].equals("-e")) {
+                    System.out.println(encryptNoEC(args[1], args[2], false));
+                }
+                else if (args[0].equals("-d")) {
+                    System.out.println(decrypt(args[1], args[2]));
+                }
+                else usage();
+                break;
+            default:
+                usage();
+        }
+    }
+
+    private static void usage() {
+        System.out.println("Usage: BIP38 [-d|-e] [passphrase] [key]\nEncrypts or decrypts a key.");
     }
 }

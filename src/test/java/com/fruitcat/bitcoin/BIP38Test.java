@@ -1,10 +1,7 @@
 package com.fruitcat.bitcoin;
 
-import com.google.bitcoin.core.Base58;
 import org.testng.annotations.Test;
 import static org.testng.Assert.assertEquals;
-
-import java.util.Arrays;
 import java.util.Random;
 
 /**
@@ -40,7 +37,7 @@ public class BIP38Test {
         (new Random()).nextBytes(r);
         String randomPass = new String(r, "ASCII");
         String key = "5KN7MzqK5wt2TP1fQCYyHBtDrXdJuXbUzm4A9rKAteGu3Qi5CVR";
-        String encryptedKey = BIP38.encryptNoEC(key, randomPass, false);
+        String encryptedKey = BIP38.encryptNoEC(randomPass, key, false);
         assertEquals(key, (BIP38.decrypt(randomPass, encryptedKey)));
     }
 
