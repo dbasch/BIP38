@@ -12,7 +12,7 @@ If you don't care about lot/sequence (if you don't know what they are, you don't
 
 `BIP38.decrypt(password, encryptedKey)` yields the decrypted get.
 
-## Example:
+## Example
 
    Key generation:
 

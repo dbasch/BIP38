@@ -1,6 +1,7 @@
 /**
  *
  * Copyright 2014 Diego Basch
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -16,7 +17,9 @@
 
 package com.fruitcat.bitcoin;
 
+import com.google.bitcoin.core.Base58;
 import org.bouncycastle.math.ec.ECPoint;
+
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
@@ -64,5 +67,19 @@ public class Utils {
             System.out.print(l + " ");
         }
         System.out.println();
+    }
+
+    /**
+     * Appends a Bitcoin-style checksum to a byte array and encodes the result as Base58.
+     * @param b a byte array
+     * @return the encoded concatenation of the byte array and its checksum
+     * @throws NoSuchAlgorithmException
+     */
+
+    public static String base58Check(byte [] b) throws NoSuchAlgorithmException {
+        byte[] r = new byte[b.length + 4];
+        System.arraycopy(b, 0, r, 0, b.length);
+        System.arraycopy(doubleHash(b, 0, b.length), 0, r, b.length, 4);
+        return Base58.encode(r);
     }
 }
