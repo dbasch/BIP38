@@ -1,7 +1,10 @@
 package com.fruitcat.bitcoin;
 
+import com.google.bitcoin.core.Base58;
 import org.testng.annotations.Test;
 import static org.testng.Assert.assertEquals;
+
+import java.util.Arrays;
 import java.util.Random;
 
 /**
@@ -14,7 +17,7 @@ public class BIP38Test {
 
     //EC multiply, no compression, no lot/sequence numbers
     @Test
-    public void decryptECNoCompressionNoLotTest() throws Exception {
+    public void decryptECNoCompressionNoLot() throws Exception {
         String encryptedKey = "6PfQu77ygVyJLZjfvMLyhLMQbYnu5uguoJJ4kMCLqWwPEdfpwANVS76gTX";
         String key = "5K4caxezwjGCGfnoPTZ8tMcJBLB7Jvyjv4xxeacadhq8nLisLR2";
         String decryptedKey = BIP38.decrypt(testPass, encryptedKey);
@@ -36,9 +39,16 @@ public class BIP38Test {
         byte[] r = new byte[16];
         (new Random()).nextBytes(r);
         String randomPass = new String(r, "ASCII");
-        System.out.println(randomPass);
         String key = "5KN7MzqK5wt2TP1fQCYyHBtDrXdJuXbUzm4A9rKAteGu3Qi5CVR";
         String encryptedKey = BIP38.encryptNoEC(key, randomPass, false);
         assertEquals(key, (BIP38.decrypt(randomPass, encryptedKey)));
+    }
+
+    //generate an encrypted key and make sure it looks ok.
+    @Test
+    public void generateEncryptedKey() throws Exception {
+        String k = BIP38.generateEncryptedKey(testPass);
+        String dk = BIP38.decrypt(testPass, k);
+        assertEquals(dk.charAt(0), '5');
     }
 }

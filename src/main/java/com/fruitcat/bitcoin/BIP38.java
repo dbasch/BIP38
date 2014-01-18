@@ -34,10 +34,7 @@ import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.security.GeneralSecurityException;
-import java.security.Key;
-import java.security.SecureRandom;
-import java.security.Security;
+import java.security.*;
 import java.util.Arrays;
 
 public class BIP38 {
@@ -51,16 +48,27 @@ public class BIP38 {
     /**
      * Generates an encrypted key with EC multiplication.
      * Only uncompressed format for now.
-     * if lot is less than 0, lot and sequence are ignored.
+     *
      * @param password
      * @return
      * @throws UnsupportedEncodingException
      * @throws GeneralSecurityException
      * @throws AddressFormatException
      */
-    public static String encryptEC(String password, int lot, int sequence) throws UnsupportedEncodingException, GeneralSecurityException, AddressFormatException {
+    public static String generateEncryptedKey(String password) throws UnsupportedEncodingException, GeneralSecurityException, AddressFormatException {
 
-        byte[] intermediate = Base58.decode(intermediatePassphrase(password, lot, sequence));
+        byte[] intermediate = Arrays.copyOfRange(Base58.decode(intermediatePassphrase(password, -1, -1)), 0, 53);
+        return encryptedKeyFromIntermediate(intermediate, -1);
+    }
+
+    /**
+     * if lot is less than 0, lot and sequence are ignored.
+     * @param intermediate
+     * @param lot
+     * @return
+     * @throws GeneralSecurityException
+     */
+    public static String encryptedKeyFromIntermediate(byte[] intermediate, int lot) throws GeneralSecurityException {
 
         byte flagByte = (lot > 0) ? (byte) 4 : (byte) 0; //uncompressed
         byte[] ownerEntropy = new byte[8];
@@ -89,7 +97,7 @@ public class BIP38 {
         byte[] m2 = new byte[16];
         for (int i = 0; i < 16; i++) {
             m1[i] = (byte) (seedB[i] ^ derivedHalf1[i]);
-            m2[i] = (byte) (m2[i] ^ derivedHalf1[16 + i]);
+
         }
 
         Cipher cipher = Cipher.getInstance("AES/ECB/NoPadding", "BC");
@@ -98,6 +106,9 @@ public class BIP38 {
         byte[] encryptedPart1 = cipher.doFinal(m1);
         System.arraycopy(encryptedPart1, 8, m2, 0, 8);
         System.arraycopy(seedB, 16, m2, 8, 8);
+        for (int i = 0 ; i < 16; i ++) {
+            m2[i] = (byte) (m2[i] ^ derivedHalf1[16 + i]);
+        }
 
         byte[] encryptedPart2 = cipher.doFinal(m2);
         byte[] encryptedPrivateKey = new byte[39];
@@ -236,14 +247,14 @@ public class BIP38 {
         byte[] m2 = cipher.doFinal(encryptedPart2);
 
         byte[] encryptedPart1 = new byte[16];
+        System.arraycopy(encryptedKey, 15, encryptedPart1, 0, 8);
+
         byte[] seedB = new byte[24];
 
         for (int i = 0; i < 16; i++) {
             m2[i] = (byte) (m2[i] ^ derivedHalf1[16 + i]);
         }
-
         System.arraycopy(m2, 0, encryptedPart1, 8, 8);
-        System.arraycopy(encryptedKey, 15, encryptedPart1, 0, 8);
 
         byte[] m1 = cipher.doFinal(encryptedPart1);
 
@@ -276,7 +287,6 @@ public class BIP38 {
         DumpedPrivateKey dk = new DumpedPrivateKey(MainNetParams.get(), encodedPrivateKey);
 
         ECKey key = dk.getKey();
-        System.out.println(key.getPrivateKeyEncoded(MainNetParams.get()));
         byte[] keyBytes = key.getPrivKeyBytes();
         String address = key.toAddress(MainNetParams.get()).toString();
         byte[] tmp = address.getBytes("ASCII");
@@ -345,8 +355,8 @@ public class BIP38 {
 
     // generate a key, decrypt it, print the decrypted key and the address.
     public static void main(String args[]) throws Exception {
-        String encryptedKey = encryptEC("hello", 1, 1);
-        System.out.println(encryptedKey);
+        String encryptedKey = generateEncryptedKey("hello");
+        System.out.println("key is:" + encryptedKey);
         String key = decrypt("hello", encryptedKey);
         DumpedPrivateKey dk = new DumpedPrivateKey(MainNetParams.get(), key);
         ECKey k = dk.getKey();

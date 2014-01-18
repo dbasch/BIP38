@@ -4,9 +4,7 @@ A Java implementation of the BIP-0038 Draft: [Passphrase-protected private key](
 
 ## Usage
 
-`BIP38.encryptEC(password, lot, sequence)` generates an encrypted key starting with 6P. 
-If you don't care about lot/sequence (if you don't know what they are, you don't care),
-   just use -1 for the lot. That will cause those parameters to be ignored.
+`BIP38.generateEncryptedKey(password)` generates an encrypted key starting with "6P".
 
 `BIP38.encryptNoEC(password, encodedKey, isCompressed)` encrypts a known key.
 
@@ -16,7 +14,7 @@ If you don't care about lot/sequence (if you don't know what they are, you don't
 
    Key generation:
 
-   `encrypt("hello", -1, -1)`
+   `generateEncryptedKey("hello")`
 
    might produce 
 

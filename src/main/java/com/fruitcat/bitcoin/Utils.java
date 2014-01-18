@@ -61,7 +61,8 @@ public class Utils {
     }
 
     //for debugging
-    protected static void pb(byte [] x) {
+    protected static void pb(String name, byte [] x) {
+        System.out.print(name + ": ");
         for (byte b : x) {
             int l = b >= 0 ? b : 256 + b;
             System.out.print(l + " ");
