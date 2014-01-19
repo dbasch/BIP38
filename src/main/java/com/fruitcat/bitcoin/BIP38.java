@@ -115,7 +115,7 @@ public class BIP38 {
     }
 
     /**
-     * Generates a confirmation code for the party that requested the key with an intermediate passphrase.
+     * Generates a confirmation code for the party that requested the address with an intermediate passphrase.
      * @param flagByte
      * @param addressHash
      * @param ownerEntropy
@@ -145,7 +145,8 @@ public class BIP38 {
     }
 
     /**
-     * Verifies a generated key.
+     * Verifies a generated key. TO DO: verify with just the confirmation code,
+     * so we don't have to decrypt the key to recalculate the address.
      * @param passphrase
      * @param generatedKey
      * @return
@@ -397,8 +398,8 @@ public class BIP38 {
     }
 
     private static void usage() {
-        System.out.println("Usage: BIP38 [-d|-e] [passphrase] [key]\nEncrypts or decrypts a key.");
-        System.out.println("       BIP38 [passphrase]\nGenerates a key encrypted with the passphrase.");
+        System.out.println("Usage: BIP38 [-d|-e] [passphrase] [key] - Encrypts or decrypts a key.");
+        System.out.println("       BIP38 [passphrase] - Generates a key encrypted with the passphrase.");
 
     }
 }
