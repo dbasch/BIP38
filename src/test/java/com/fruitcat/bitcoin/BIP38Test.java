@@ -1,7 +1,12 @@
 package com.fruitcat.bitcoin;
 
+import com.google.bitcoin.core.Base58;
+import com.google.bitcoin.core.DumpedPrivateKey;
+import com.google.bitcoin.params.MainNetParams;
 import org.testng.annotations.Test;
 import static org.testng.Assert.assertEquals;
+
+import java.util.Arrays;
 import java.util.Random;
 
 /**
@@ -47,5 +52,14 @@ public class BIP38Test {
         String k = BIP38.generateEncryptedKey(testPass);
         String dk = BIP38.decrypt(testPass, k);
         assertEquals(dk.charAt(0), '5');
+    }
+
+    //check confirmation code
+    @Test
+    public void checkConfirmation() throws Exception {
+        byte[] intermediate = Arrays.copyOfRange(Base58.decode(BIP38.intermediatePassphrase(testPass, -1, -1)), 0, 53);
+        GeneratedKey gk = BIP38.encryptedKeyFromIntermediate(intermediate);
+        assert(BIP38.verify(testPass, gk));
+        assert(!BIP38.verify("garbage", gk));
     }
 }

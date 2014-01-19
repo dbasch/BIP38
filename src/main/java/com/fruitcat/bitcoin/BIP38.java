@@ -49,15 +49,15 @@ public class BIP38 {
      * Generates an encrypted key with EC multiplication.
      * Only uncompressed format for now.
      *
-     * @param password
+     * @param passphrase
      * @return
      * @throws UnsupportedEncodingException
      * @throws GeneralSecurityException
      * @throws AddressFormatException
      */
-    public static String generateEncryptedKey(String password) throws UnsupportedEncodingException, GeneralSecurityException, AddressFormatException {
+    public static String generateEncryptedKey(String passphrase) throws UnsupportedEncodingException, GeneralSecurityException, AddressFormatException {
 
-        byte[] intermediate = Arrays.copyOfRange(Base58.decode(intermediatePassphrase(password, -1, -1)), 0, 53);
+        byte[] intermediate = Arrays.copyOfRange(Base58.decode(intermediatePassphrase(passphrase, -1, -1)), 0, 53);
         return encryptedKeyFromIntermediate(intermediate).key;
     }
 
@@ -71,10 +71,8 @@ public class BIP38 {
     public static GeneratedKey encryptedKeyFromIntermediate(byte[] intermediate) throws GeneralSecurityException {
 
         byte flagByte = (0x51 == intermediate[7]) ? (byte) 4 : (byte) 0; //uncompressed
-        byte[] ownerEntropy = new byte[8];
-        byte[] passPoint = new byte[33];
-        System.arraycopy(intermediate, 8, ownerEntropy, 0, 8);
-        System.arraycopy(intermediate, 16, passPoint, 0, 33);
+        byte[] ownerEntropy = Arrays.copyOfRange(intermediate, 8, 16);
+        byte[] passPoint = Arrays.copyOfRange(intermediate, 16, 49);
 
         byte[] seedB = new byte[24];
         SecureRandom sr = new SecureRandom();
@@ -84,7 +82,7 @@ public class BIP38 {
         ECPoint pk = p.multiply(new BigInteger(1, factorB));
         byte[] generatedAddress = Utils.sha256ripe160(pk.getEncoded());
         byte[] add = new Address(MainNetParams.get(), generatedAddress).toString().getBytes();
-        byte[] addressHash = Utils.doubleHash(add, 0, add.length);
+        byte[] addressHash = Arrays.copyOfRange(Utils.doubleHash(add, 0, add.length), 0, 4);
 
         byte[] salt = Utils.concat(addressHash, ownerEntropy);
         byte[] secondKey = SCrypt.scrypt(passPoint, salt, 1024, 1, 1, 64);
@@ -106,17 +104,28 @@ public class BIP38 {
         }
 
         byte[] encryptedPart2 = Utils.AESEncrypt(m2, derivedHalf2);
-        byte[] header = { 0x01, 0x43, flagByte};
+        byte[] header = { 0x01, 0x43, flagByte };
 
         byte[] encryptedPrivateKey = Utils.concat(header, addressHash, ownerEntropy,
                 Arrays.copyOfRange(encryptedPart1, 0, 8), encryptedPart2);
 
         String key = Utils.base58Check(encryptedPrivateKey);
-        String confirmationCode = confirmation(flagByte, addressHash, ownerEntropy, factorB, derivedHalf1, derivedHalf2);
+        String confirmationCode = confirm(flagByte, addressHash, ownerEntropy, factorB, derivedHalf1, derivedHalf2);
         return new GeneratedKey(key, confirmationCode);
     }
 
-    private static String confirmation(byte flagByte, byte[] addressHash, byte [] ownerEntropy, byte[] factorB, byte[] derivedHalf1, byte[] derivedHalf2)
+    /**
+     * Generates a confirmation code for the party that requested the key with an intermediate passphrase.
+     * @param flagByte
+     * @param addressHash
+     * @param ownerEntropy
+     * @param factorB
+     * @param derivedHalf1
+     * @param derivedHalf2
+     * @return a string with the encoded confirmation.
+     * @throws GeneralSecurityException
+     */
+    private static String confirm(byte flagByte, byte[] addressHash, byte [] ownerEntropy, byte[] factorB, byte[] derivedHalf1, byte[] derivedHalf2)
             throws GeneralSecurityException {
         byte[] pointB = CURVE.getG().multiply(new BigInteger(1, factorB)).getEncoded();
         byte pointBPrefix = (byte) (pointB[0] ^ (derivedHalf2[31] & 1));
@@ -135,21 +144,39 @@ public class BIP38 {
         return Utils.base58Check(result);
     }
 
-    public boolean verify(String passphrase, String confirmationCode) {
-          return true;
+    /**
+     * Verifies a generated key.
+     * @param passphrase
+     * @param generatedKey
+     * @return
+     * @throws AddressFormatException
+     */
+    public static boolean verify(String passphrase, GeneratedKey generatedKey)
+            throws AddressFormatException, UnsupportedEncodingException, GeneralSecurityException {
+        byte[] confirmation = Base58.decode(generatedKey.confirmationCode);
+        DumpedPrivateKey dk = new DumpedPrivateKey(MainNetParams.get(), decrypt(passphrase, generatedKey.key));
+
+        ECKey key = dk.getKey();
+        byte[] keyBytes = key.getPrivKeyBytes();
+        String address = key.toAddress(MainNetParams.get()).toString();
+        byte[] tmp = address.getBytes("ASCII");
+        byte[] hash = Utils.doubleHash(tmp, 0, tmp.length);
+        byte[] addressHash = Arrays.copyOfRange(hash, 0, 4);
+
+        return Arrays.equals(addressHash, Arrays.copyOfRange(confirmation, 6, 10));
     }
 
     /**
      * Generates the intermediate passphrase string as specified by BIP-0038.
      * If lot is a negative number, lot and sequence are not used.
-     * @param password
+     * @param passphrase
      * @param lot
      * @param sequence
      * @return the passphrase
-     * @throws UnsupportedEncodingException
-     * @throws GeneralSecurityException
+     * @throws java.io.UnsupportedEncodingException
+     * @throws java.security.GeneralSecurityException
      */
-    public static String intermediatePassphrase(String password, int lot, int sequence)
+    public static String intermediatePassphrase(String passphrase, int lot, int sequence)
             throws UnsupportedEncodingException, GeneralSecurityException {
 
         SecureRandom sr = new SecureRandom();
@@ -170,7 +197,7 @@ public class BIP38 {
             byte[] ls = b.array();
             System.arraycopy(ownerSalt, 0, ownerEntropy, 0, 4);
             System.arraycopy(ls, 0, ownerEntropy, 4, 4);
-            preFactor = SCrypt.scrypt(password.getBytes("UTF8"), ownerSalt, 16384, 8, 8, 32);
+            preFactor = SCrypt.scrypt(passphrase.getBytes("UTF8"), ownerSalt, 16384, 8, 8, 32);
             byte[] tmp = Utils.concat(preFactor, ownerEntropy);
             passFactor = Utils.doubleHash(tmp, 0, 40);
 
@@ -179,7 +206,7 @@ public class BIP38 {
             ownerSalt = new byte[8];
             sr.nextBytes(ownerSalt);
             ownerEntropy = ownerSalt;
-            passFactor = SCrypt.scrypt(password.getBytes("UTF8"), ownerSalt, 16384, 8, 8, 32);
+            passFactor = SCrypt.scrypt(passphrase.getBytes("UTF8"), ownerSalt, 16384, 8, 8, 32);
         }
 
         ECPoint g = CURVE.getG();
@@ -192,22 +219,22 @@ public class BIP38 {
 
     /**
      * Decrypts an encrypted key.
-     * @param password
+     * @param passphrase
      * @param encryptedKey
      * @return decrypted key
      * @throws AddressFormatException
      * @throws GeneralSecurityException
      * @throws UnsupportedEncodingException
      */
-    public static String decrypt(String password, String encryptedKey) throws
+    public static String decrypt(String passphrase, String encryptedKey) throws
             AddressFormatException, GeneralSecurityException, UnsupportedEncodingException {
         byte[] encryptedKeyBytes = Base58.decode(encryptedKey);
         String result;
         byte ec = encryptedKeyBytes[1];
         switch (ec) {
-            case 0x43: result = decryptEC(password, encryptedKeyBytes);
+            case 0x43: result = decryptEC(passphrase, encryptedKeyBytes);
                 break;
-            case 0x42: result = decryptNoEC(password, encryptedKeyBytes);
+            case 0x42: result = decryptNoEC(passphrase, encryptedKeyBytes);
                 break;
             default: throw new RuntimeException("Invalid key - second byte is: " + ec);
         }
@@ -216,24 +243,23 @@ public class BIP38 {
 
     /**
      * Decrypts a key encrypted with EC multiplication
-     * @param password
+     * @param passphrase
      * @param encryptedKey
      * @return decrypted key
      * @throws UnsupportedEncodingException
      * @throws GeneralSecurityException
      */
-    public static String decryptEC(String password, byte[] encryptedKey) throws UnsupportedEncodingException, GeneralSecurityException {
+    public static String decryptEC(String passphrase, byte[] encryptedKey) throws UnsupportedEncodingException, GeneralSecurityException {
 
         byte flagByte = encryptedKey[2];
         byte[] passFactor;
         byte[] ownerSalt = Arrays.copyOfRange(encryptedKey, 7, 15 - (flagByte & 4));
         if ((flagByte & 4) == 0) {
-            passFactor = SCrypt.scrypt(password.getBytes("UTF8"), ownerSalt, 16384, 8, 8, 32);
+            passFactor = SCrypt.scrypt(passphrase.getBytes("UTF8"), ownerSalt, 16384, 8, 8, 32);
         }
         else {
-            byte[] preFactor = SCrypt.scrypt(password.getBytes("UTF8"), ownerSalt, 16384, 8, 8, 32);
-            byte[] ownerEntropy = new byte[8];
-            System.arraycopy(encryptedKey, 7, ownerEntropy, 0, 8);
+            byte[] preFactor = SCrypt.scrypt(passphrase.getBytes("UTF8"), ownerSalt, 16384, 8, 8, 32);
+            byte[] ownerEntropy = Arrays.copyOfRange(encryptedKey, 7, 15);
             byte[] tmp = new byte[40];
             System.arraycopy(preFactor, 0, tmp, 0, 32);
             System.arraycopy(ownerEntropy, 0, tmp, 32, 8);
@@ -283,14 +309,14 @@ public class BIP38 {
     /**
      * Encrypts a key without using EC multiplication.
      * @param encodedPrivateKey
-     * @param password
+     * @param passphrase
      * @param isCompressed
      * @return
      * @throws GeneralSecurityException
      * @throws UnsupportedEncodingException
      * @throws AddressFormatException
      */
-    public static String encryptNoEC(String password, String encodedPrivateKey, boolean isCompressed)
+    public static String encryptNoEC(String passphrase, String encodedPrivateKey, boolean isCompressed)
             throws GeneralSecurityException, UnsupportedEncodingException, AddressFormatException {
 
         DumpedPrivateKey dk = new DumpedPrivateKey(MainNetParams.get(), encodedPrivateKey);
@@ -301,7 +327,7 @@ public class BIP38 {
         byte[] tmp = address.getBytes("ASCII");
         byte[] hash = Utils.doubleHash(tmp, 0, tmp.length);
         byte[] addressHash = Arrays.copyOfRange(hash, 0, 4);
-        byte[] scryptKey = SCrypt.scrypt(password.getBytes("UTF8"), addressHash, 16384, 8, 8, 64);
+        byte[] scryptKey = SCrypt.scrypt(passphrase.getBytes("UTF8"), addressHash, 16384, 8, 8, 64);
         byte[] derivedHalf1 = Arrays.copyOfRange(scryptKey, 0, 32);
         byte[] derivedHalf2 = Arrays.copyOfRange(scryptKey, 32, 64);
 
@@ -315,14 +341,7 @@ public class BIP38 {
         byte[] encryptedHalf1 = Utils.AESEncrypt(k1, derivedHalf2);
         byte[] encryptedHalf2 = Utils.AESEncrypt(k2, derivedHalf2);
 
-        //byte[] encryptedPrivateKey = new byte[39];
         byte[] header = { 0x01, 0x42, (byte) (isCompressed ? 0xe0 : 0xc0) };
-        /*encryptedPrivateKey[0] = 0x01;
-        encryptedPrivateKey[1] = 0x42;
-        encryptedPrivateKey[2] = (byte) (isCompressed ? 0xe0 : 0xc0);
-        System.arraycopy(addressHash, 0, encryptedPrivateKey, 3, 4);
-        System.arraycopy(encryptedHalf1, 0, encryptedPrivateKey, 7, 16);
-        System.arraycopy(encryptedHalf2, 0, encryptedPrivateKey, 23, 16);*/
         byte[] encryptedPrivateKey = Utils.concat(header, addressHash, encryptedHalf1, encryptedHalf2);
 
         return Utils.base58Check(encryptedPrivateKey);
@@ -330,16 +349,16 @@ public class BIP38 {
 
     /**
      * Decrypts a key that was encrypted without EC multiplication.
-     * @param password
+     * @param passphrase
      * @param encryptedKey
      * @return the key, Base58-encoded
      * @throws UnsupportedEncodingException
      * @throws GeneralSecurityException
      */
-    public static String decryptNoEC(String password, byte[] encryptedKey) throws UnsupportedEncodingException, GeneralSecurityException{
+    public static String decryptNoEC(String passphrase, byte[] encryptedKey) throws UnsupportedEncodingException, GeneralSecurityException{
 
         byte[] addressHash =  Arrays.copyOfRange(encryptedKey, 3, 7);
-        byte[] scryptKey = SCrypt.scrypt(password.getBytes("UTF8"), addressHash, 16384, 8, 8, 64);
+        byte[] scryptKey = SCrypt.scrypt(passphrase.getBytes("UTF8"), addressHash, 16384, 8, 8, 64);
         byte[] derivedHalf1 = Arrays.copyOfRange(scryptKey, 0, 32);
         byte[] derivedHalf2 = Arrays.copyOfRange(scryptKey, 32, 64);
 
@@ -369,6 +388,9 @@ public class BIP38 {
                 }
                 else usage();
                 break;
+            case 1:
+                System.out.println(generateEncryptedKey(args[0]));
+                break;
             default:
                 usage();
         }
@@ -376,5 +398,7 @@ public class BIP38 {
 
     private static void usage() {
         System.out.println("Usage: BIP38 [-d|-e] [passphrase] [key]\nEncrypts or decrypts a key.");
+        System.out.println("       BIP38 [passphrase]\nGenerates a key encrypted with the passphrase.");
+
     }
 }
