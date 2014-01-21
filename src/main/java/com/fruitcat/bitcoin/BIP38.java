@@ -57,7 +57,7 @@ public class BIP38 {
      */
     public static String generateEncryptedKey(String passphrase) throws UnsupportedEncodingException, GeneralSecurityException, AddressFormatException {
 
-        byte[] intermediate = Arrays.copyOfRange(Base58.decode(intermediatePassphrase(passphrase, -1, -1)), 0, 53);
+        byte[] intermediate = Arrays.copyOfRange(Base58.decodeChecked(intermediatePassphrase(passphrase, -1, -1)), 0, 53);
         return encryptedKeyFromIntermediate(intermediate).key;
     }
 
@@ -81,7 +81,8 @@ public class BIP38 {
         ECPoint p = CURVE.getCurve().decodePoint(passPoint);
         ECPoint pk = p.multiply(new BigInteger(1, factorB));
         byte[] generatedAddress = Utils.sha256ripe160(pk.getEncoded());
-        byte[] add = new Address(MainNetParams.get(), generatedAddress).toString().getBytes();
+        String addStr = new Address(MainNetParams.get(), generatedAddress).toString();
+        byte[] add = addStr.getBytes();
         byte[] addressHash = Arrays.copyOfRange(Utils.doubleHash(add, 0, add.length), 0, 4);
 
         byte[] salt = Utils.concat(addressHash, ownerEntropy);
@@ -111,7 +112,7 @@ public class BIP38 {
 
         String key = Utils.base58Check(encryptedPrivateKey);
         String confirmationCode = confirm(flagByte, addressHash, ownerEntropy, factorB, derivedHalf1, derivedHalf2);
-        return new GeneratedKey(key, confirmationCode);
+        return new GeneratedKey(key, addStr, confirmationCode);
     }
 
     /**
@@ -154,17 +155,11 @@ public class BIP38 {
      */
     public static boolean verify(String passphrase, GeneratedKey generatedKey)
             throws AddressFormatException, UnsupportedEncodingException, GeneralSecurityException {
-        byte[] confirmation = Base58.decode(generatedKey.confirmationCode);
         DumpedPrivateKey dk = new DumpedPrivateKey(MainNetParams.get(), decrypt(passphrase, generatedKey.key));
-
         ECKey key = dk.getKey();
-        byte[] keyBytes = key.getPrivKeyBytes();
         String address = key.toAddress(MainNetParams.get()).toString();
-        byte[] tmp = address.getBytes("ASCII");
-        byte[] hash = Utils.doubleHash(tmp, 0, tmp.length);
-        byte[] addressHash = Arrays.copyOfRange(hash, 0, 4);
 
-        return Arrays.equals(addressHash, Arrays.copyOfRange(confirmation, 6, 10));
+        return address.equals(generatedKey.address);
     }
 
     /**
@@ -189,15 +184,13 @@ public class BIP38 {
         byte[] passFactor;
 
         if (lot >= 0) {
-            ownerEntropy = new byte[8];
             ownerSalt = new byte[4];
             sr.nextBytes(ownerSalt);
             ByteBuffer b = ByteBuffer.allocate(4);
             b.order(ByteOrder.BIG_ENDIAN); // redundant in Java because it's the default
             b.putInt(4096 * lot + sequence);
             byte[] ls = b.array();
-            System.arraycopy(ownerSalt, 0, ownerEntropy, 0, 4);
-            System.arraycopy(ls, 0, ownerEntropy, 4, 4);
+            ownerEntropy = Utils.concat(ownerSalt, ls);
             preFactor = SCrypt.scrypt(passphrase.getBytes("UTF8"), ownerSalt, 16384, 8, 8, 32);
             byte[] tmp = Utils.concat(preFactor, ownerEntropy);
             passFactor = Utils.doubleHash(tmp, 0, 40);
@@ -229,7 +222,7 @@ public class BIP38 {
      */
     public static String decrypt(String passphrase, String encryptedKey) throws
             AddressFormatException, GeneralSecurityException, UnsupportedEncodingException {
-        byte[] encryptedKeyBytes = Base58.decode(encryptedKey);
+        byte[] encryptedKeyBytes = Base58.decodeChecked(encryptedKey);
         String result;
         byte ec = encryptedKeyBytes[1];
         switch (ec) {
@@ -261,9 +254,7 @@ public class BIP38 {
         else {
             byte[] preFactor = SCrypt.scrypt(passphrase.getBytes("UTF8"), ownerSalt, 16384, 8, 8, 32);
             byte[] ownerEntropy = Arrays.copyOfRange(encryptedKey, 7, 15);
-            byte[] tmp = new byte[40];
-            System.arraycopy(preFactor, 0, tmp, 0, 32);
-            System.arraycopy(ownerEntropy, 0, tmp, 32, 8);
+            byte[] tmp = Utils.concat(preFactor, ownerEntropy);
             passFactor = Utils.doubleHash(tmp, 0, 40);
 
         }

@@ -18,16 +18,18 @@
 package com.fruitcat.bitcoin;
 
 /**
- * Convenience container for the key and the confirmation code.
+ * Convenience container for the key, address, and the confirmation code.
  * If you generated the key yourself, you can disregard the confirmation code.
  */
 
 public class GeneratedKey {
     public final String confirmationCode;
+    public final String address;
     public final String key;
 
-    public GeneratedKey(String key, String confirmationCode) {
+    public GeneratedKey(String key, String address, String confirmationCode) {
         this.confirmationCode = confirmationCode;
+        this.address = address;
         this.key = key;
     }
 }

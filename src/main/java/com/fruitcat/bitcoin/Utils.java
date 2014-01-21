@@ -22,6 +22,7 @@ import org.bouncycastle.math.ec.ECPoint;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.ByteArrayOutputStream;
 import java.security.GeneralSecurityException;
 import java.security.Key;
 import java.security.MessageDigest;
@@ -112,18 +113,17 @@ public class Utils {
      * @return
      */
     public static byte[] concat(byte[]... buffers) {
-        int l = 0;
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
         for (byte [] b : buffers) {
-            l += b.length;
-        }
-        byte[] ret = new byte[l];
-        int off = 0;
-        for (byte [] b : buffers) {
-            System.arraycopy(b, 0, ret, off, b.length);
-            off += b.length;
-        }
+            try {
+                baos.write(b);
+            }
+            catch (java.io.IOException e) {
+                throw new RuntimeException(e.getMessage());
+            }
 
-        return ret;
+        }
+        return baos.toByteArray();
     }
 
     //for debugging

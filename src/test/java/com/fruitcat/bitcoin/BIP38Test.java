@@ -22,6 +22,10 @@ public class BIP38Test {
         String key = "5K4caxezwjGCGfnoPTZ8tMcJBLB7Jvyjv4xxeacadhq8nLisLR2";
         String decryptedKey = BIP38.decrypt(testPass, encryptedKey);
         assertEquals(key, decryptedKey);
+        key = "5JaG7FiZ8BeR6UVRvmToHGnj1noMFre6F4Y6Kaup8k1P2KNQQbw";
+        encryptedKey = "6PfMVKnt1UJzfi1KYfRRANwNEaF3yHpz9dujgFUV5GbYUdyTU6En8DrFAb";
+        decryptedKey = BIP38.decrypt("correct horse battery staple", encryptedKey);
+        assertEquals(key, decryptedKey);
     }
 
     @Test
