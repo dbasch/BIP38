@@ -126,7 +126,7 @@ public class BIP38 {
      * @return a string with the encoded confirmation.
      * @throws GeneralSecurityException
      */
-    private static String confirm(byte flagByte, byte[] addressHash, byte [] ownerEntropy, byte[] factorB, byte[] derivedHalf1, byte[] derivedHalf2)
+    private static String confirm(byte flagByte, byte[] addressHash, byte[] ownerEntropy, byte[] factorB, byte[] derivedHalf1, byte[] derivedHalf2)
             throws GeneralSecurityException {
         byte[] pointB = CURVE.getG().multiply(new BigInteger(1, factorB)).getEncoded();
         byte pointBPrefix = (byte) (pointB[0] ^ (derivedHalf2[31] & 1));
@@ -363,7 +363,8 @@ public class BIP38 {
             keyBytes[i] = (byte) (k1[i] ^ derivedHalf1[i]);
             keyBytes[i + 16] = (byte) (k2[i] ^ derivedHalf1[i + 16]);
         }
-        boolean compressed = (keyBytes[2] & (byte) 0xe0) == 0;
+
+        boolean compressed = (encryptedKey[2] & (byte) 0x20) == 0x20;
         ECKey k = new ECKey(new BigInteger(1, keyBytes), null, compressed);
         return k.getPrivateKeyEncoded(MainNetParams.get()).toString();
     }

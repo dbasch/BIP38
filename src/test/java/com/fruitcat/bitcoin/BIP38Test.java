@@ -15,26 +15,62 @@ public class BIP38Test {
 
     String testPass = "TestingOneTwoThree";
 
-    //EC multiply, no compression, no lot/sequence numbers
     @Test
-    public void decryptECNoCompressionNoLot() throws Exception {
-        String encryptedKey = "6PfQu77ygVyJLZjfvMLyhLMQbYnu5uguoJJ4kMCLqWwPEdfpwANVS76gTX";
-        String key = "5K4caxezwjGCGfnoPTZ8tMcJBLB7Jvyjv4xxeacadhq8nLisLR2";
-        String decryptedKey = BIP38.decrypt(testPass, encryptedKey);
-        assertEquals(key, decryptedKey);
-        key = "5JaG7FiZ8BeR6UVRvmToHGnj1noMFre6F4Y6Kaup8k1P2KNQQbw";
-        encryptedKey = "6PfMVKnt1UJzfi1KYfRRANwNEaF3yHpz9dujgFUV5GbYUdyTU6En8DrFAb";
-        decryptedKey = BIP38.decrypt("correct horse battery staple", encryptedKey);
-        assertEquals(key, decryptedKey);
-    }
-
-    @Test
-    public void decryptNoECNoCompression() throws Exception {
+    public void noCompressionNoECMultiply() throws Exception {
+        //test 1
         String encryptedKey = "6PRVWUbkzzsbcVac2qwfssoUJAN1Xhrg6bNk8J7Nzm5H7kxEbn2Nh2ZoGg";
         String key = "5KN7MzqK5wt2TP1fQCYyHBtDrXdJuXbUzm4A9rKAteGu3Qi5CVR";
         String decryptedKey = BIP38.decrypt(testPass, encryptedKey);
         assertEquals(key, decryptedKey);
+        //test 2
+        encryptedKey = "6PRNFFkZc2NZ6dJqFfhRoFNMR9Lnyj7dYGrzdgXXVMXcxoKTePPX1dWByq";
+        key = "5HtasZ6ofTHP6HCwTqTkLDuLQisYPah7aUnSKfC7h4hMUVw2gi5";
+        decryptedKey = BIP38.decrypt("Satoshi", encryptedKey);
+        assertEquals(key, decryptedKey);
+    }
 
+    @Test
+    public void compressionNoECMultiply() throws Exception {
+        //test 1
+        String encryptedKey = "6PYNKZ1EAgYgmQfmNVamxyXVWHzK5s6DGhwP4J5o44cvXdoY7sRzhtpUeo";
+        String key = "L44B5gGEpqEDRS9vVPz7QT35jcBG2r3CZwSwQ4fCewXAhAhqGVpP";
+        String decryptedKey = BIP38.decrypt(testPass, encryptedKey);
+        assertEquals(key, decryptedKey);
+        //test 2
+        encryptedKey = "6PYLtMnXvfG3oJde97zRyLYFZCYizPU5T3LwgdYJz1fRhh16bU7u6PPmY7";
+        key =  "KwYgW8gcxj1JWJXhPSu4Fqwzfhp5Yfi42mdYmMa4XqK7NJxXUSK7";
+        decryptedKey = BIP38.decrypt("Satoshi", encryptedKey);
+        assertEquals(key, decryptedKey);
+    }
+
+    //EC multiply, no compression, no lot/sequence numbers
+    @Test
+    public void ecMultiplyNoCompressionNoLot() throws Exception {
+        //test 1
+        String encryptedKey = "6PfQu77ygVyJLZjfvMLyhLMQbYnu5uguoJJ4kMCLqWwPEdfpwANVS76gTX";
+        String key = "5K4caxezwjGCGfnoPTZ8tMcJBLB7Jvyjv4xxeacadhq8nLisLR2";
+        String decryptedKey = BIP38.decrypt(testPass, encryptedKey);
+        assertEquals(key, decryptedKey);
+        //test 2
+        key = "5KJ51SgxWaAYR13zd9ReMhJpwrcX47xTJh2D3fGPG9CM8vkv5sH";
+        encryptedKey = "6PfLGnQs6VZnrNpmVKfjotbnQuaJK4KZoPFrAjx1JMJUa1Ft8gnf5WxfKd";
+        decryptedKey = BIP38.decrypt("Satoshi", encryptedKey);
+        assertEquals(key, decryptedKey);
+    }
+
+    //EC multiply, no compression, lot/sequence
+    @Test
+    public void ecMultiplyNoCompressionLot() throws Exception {
+        //test 1
+        String encryptedKey = "6PgNBNNzDkKdhkT6uJntUXwwzQV8Rr2tZcbkDcuC9DZRsS6AtHts4Ypo1j";
+        String key = "5JLdxTtcTHcfYcmJsNVy1v2PMDx432JPoYcBTVVRHpPaxUrdtf8";
+        String decryptedKey = BIP38.decrypt("MOLON LABE", encryptedKey);
+        assertEquals(key, decryptedKey);
+        //test 2
+        encryptedKey = "6PgGWtx25kUg8QWvwuJAgorN6k9FbE25rv5dMRwu5SKMnfpfVe5mar2ngH";
+        key = "5KMKKuUmAkiNbA3DazMQiLfDq47qs8MAEThm4yL8R2PhV1ov33D";
+        decryptedKey = BIP38.decrypt("ΜΟΛΩΝ ΛΑΒΕ", encryptedKey);
+        assertEquals(key, decryptedKey);
     }
 
     //round encrypt and decrypt with a random ascii password

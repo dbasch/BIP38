@@ -47,7 +47,7 @@ public class Utils {
      * @return
      * @throws NoSuchAlgorithmException
      */
-    public static byte[] doubleHash(byte [] data, int off, int len) throws NoSuchAlgorithmException {
+    public static byte[] doubleHash(byte[] data, int off, int len) throws NoSuchAlgorithmException {
         MessageDigest md = MessageDigest.getInstance("SHA-256");
         md.update(data, off, len);
         return md.digest(md.digest());
@@ -121,13 +121,12 @@ public class Utils {
             catch (java.io.IOException e) {
                 throw new RuntimeException(e.getMessage());
             }
-
         }
         return baos.toByteArray();
     }
 
     //for debugging
-    protected static void pb(String name, byte [] x) {
+    protected static void pb(String name, byte[] x) {
         System.out.print(name + ": ");
         for (byte b : x) {
             int l = b >= 0 ? b : 256 + b;
