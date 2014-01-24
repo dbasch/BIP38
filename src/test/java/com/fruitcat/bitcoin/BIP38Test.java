@@ -1,11 +1,13 @@
 package com.fruitcat.bitcoin;
 
 import com.google.bitcoin.core.Base58;
+import com.google.bitcoin.params.MainNetParams;
 import org.testng.annotations.Test;
-import static org.testng.Assert.assertEquals;
 
 import java.util.Arrays;
 import java.util.Random;
+
+import static org.testng.Assert.assertEquals;
 
 /**
  * Unit tests

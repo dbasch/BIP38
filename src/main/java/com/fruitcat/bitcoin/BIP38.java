@@ -39,11 +39,17 @@ import java.util.Arrays;
 
 public class BIP38 {
 
+    private static NetworkParameters params = MainNetParams.get();
+
     static {
         Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
     }
 
     private static final X9ECParameters CURVE = SECNamedCurves.getByName("secp256k1");
+
+    public static void setNetParams(NetworkParameters p) {
+        params = p;
+    }
 
     /**
      * Generates an encrypted key with EC multiplication.
@@ -81,7 +87,7 @@ public class BIP38 {
         ECPoint p = CURVE.getCurve().decodePoint(passPoint);
         ECPoint pk = p.multiply(new BigInteger(1, factorB));
         byte[] generatedAddress = Utils.sha256ripe160(pk.getEncoded());
-        String addStr = new Address(MainNetParams.get(), generatedAddress).toString();
+        String addStr = new Address(params, generatedAddress).toString();
         byte[] add = addStr.getBytes();
         byte[] addressHash = Arrays.copyOfRange(Utils.doubleHash(add, 0, add.length), 0, 4);
 
@@ -155,9 +161,9 @@ public class BIP38 {
      */
     public static boolean verify(String passphrase, GeneratedKey generatedKey)
             throws AddressFormatException, UnsupportedEncodingException, GeneralSecurityException {
-        DumpedPrivateKey dk = new DumpedPrivateKey(MainNetParams.get(), decrypt(passphrase, generatedKey.key));
+        DumpedPrivateKey dk = new DumpedPrivateKey(params, decrypt(passphrase, generatedKey.key));
         ECKey key = dk.getKey();
-        String address = key.toAddress(MainNetParams.get()).toString();
+        String address = key.toAddress(params).toString();
 
         return address.equals(generatedKey.address);
     }
@@ -295,7 +301,7 @@ public class BIP38 {
         BigInteger pk = new BigInteger(1, passFactor).multiply(new BigInteger(1, factorB)).remainder(n);
 
         ECKey privKey = new ECKey(pk, null);
-        return privKey.getPrivateKeyEncoded(MainNetParams.get()).toString();
+        return privKey.getPrivateKeyEncoded(params).toString();
     }
 
     /**
@@ -309,22 +315,6 @@ public class BIP38 {
      * @throws AddressFormatException
      */
     public static String encryptNoEC(String passphrase, String encodedPrivateKey, boolean isCompressed)
-            throws GeneralSecurityException, UnsupportedEncodingException, AddressFormatException {
-        return encryptNoEC(passphrase, encodedPrivateKey, isCompressed, MainNetParams.get());
-    }
-
-    /**
-     * Encrypts a key without using EC multiplication.
-     * @param encodedPrivateKey
-     * @param passphrase
-     * @param isCompressed
-     * @param params
-     * @return
-     * @throws GeneralSecurityException
-     * @throws UnsupportedEncodingException
-     * @throws AddressFormatException
-     */
-    public static String encryptNoEC(String passphrase, String encodedPrivateKey, boolean isCompressed, NetworkParameters params)
             throws GeneralSecurityException, UnsupportedEncodingException, AddressFormatException {
 
         DumpedPrivateKey dk = new DumpedPrivateKey(params, encodedPrivateKey);
@@ -365,19 +355,6 @@ public class BIP38 {
      * @throws GeneralSecurityException
      */
     public static String decryptNoEC(String passphrase, byte[] encryptedKey) throws UnsupportedEncodingException, GeneralSecurityException {
-        return decryptNoEC(passphrase, encryptedKey, MainNetParams.get());
-    }
-
-    /**
-     * Decrypts a key that was encrypted without EC multiplication.
-     * @param passphrase
-     * @param encryptedKey
-     * @param params
-     * @return the key, Base58-encoded
-     * @throws UnsupportedEncodingException
-     * @throws GeneralSecurityException
-     */
-    public static String decryptNoEC(String passphrase, byte[] encryptedKey, NetworkParameters params) throws UnsupportedEncodingException, GeneralSecurityException {
 
         byte[] addressHash =  Arrays.copyOfRange(encryptedKey, 3, 7);
         byte[] scryptKey = SCrypt.scrypt(passphrase.getBytes("UTF8"), addressHash, 16384, 8, 8, 64);
