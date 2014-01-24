@@ -50,12 +50,19 @@ public class BIP38Test {
         String encryptedKey = "6PfQu77ygVyJLZjfvMLyhLMQbYnu5uguoJJ4kMCLqWwPEdfpwANVS76gTX";
         String key = "5K4caxezwjGCGfnoPTZ8tMcJBLB7Jvyjv4xxeacadhq8nLisLR2";
         String decryptedKey = BIP38.decrypt(testPass, encryptedKey);
+        long ls = Utils.getLotSequence(encryptedKey);
         assertEquals(key, decryptedKey);
+        assertEquals(-1, ls / 4096);
+        assertEquals(-1, ls % 4096);
         //test 2
         key = "5KJ51SgxWaAYR13zd9ReMhJpwrcX47xTJh2D3fGPG9CM8vkv5sH";
         encryptedKey = "6PfLGnQs6VZnrNpmVKfjotbnQuaJK4KZoPFrAjx1JMJUa1Ft8gnf5WxfKd";
         decryptedKey = BIP38.decrypt("Satoshi", encryptedKey);
         assertEquals(key, decryptedKey);
+        ls = Utils.getLotSequence(encryptedKey);
+        assertEquals(key, decryptedKey);
+        assertEquals(-1, ls / 4096);
+        assertEquals(-1, ls % 4096);
     }
 
     //EC multiply, no compression, lot/sequence
@@ -65,12 +72,19 @@ public class BIP38Test {
         String encryptedKey = "6PgNBNNzDkKdhkT6uJntUXwwzQV8Rr2tZcbkDcuC9DZRsS6AtHts4Ypo1j";
         String key = "5JLdxTtcTHcfYcmJsNVy1v2PMDx432JPoYcBTVVRHpPaxUrdtf8";
         String decryptedKey = BIP38.decrypt("MOLON LABE", encryptedKey);
+        long ls = Utils.getLotSequence(encryptedKey);
+        assertEquals(ls / 4096, 263183);
+        assertEquals(ls % 4096, 1);
+
         assertEquals(key, decryptedKey);
         //test 2
         encryptedKey = "6PgGWtx25kUg8QWvwuJAgorN6k9FbE25rv5dMRwu5SKMnfpfVe5mar2ngH";
         key = "5KMKKuUmAkiNbA3DazMQiLfDq47qs8MAEThm4yL8R2PhV1ov33D";
         decryptedKey = BIP38.decrypt("ΜΟΛΩΝ ΛΑΒΕ", encryptedKey);
         assertEquals(key, decryptedKey);
+        ls = Utils.getLotSequence(encryptedKey);
+        assertEquals(ls / 4096, 806938);
+        assertEquals(ls % 4096, 1);
     }
 
     //round encrypt and decrypt with a random ascii password

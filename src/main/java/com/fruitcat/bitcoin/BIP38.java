@@ -247,8 +247,9 @@ public class BIP38 {
 
         byte flagByte = encryptedKey[2];
         byte[] passFactor;
+        boolean hasLot = (flagByte & 4) == 4;
         byte[] ownerSalt = Arrays.copyOfRange(encryptedKey, 7, 15 - (flagByte & 4));
-        if ((flagByte & 4) == 0) {
+        if (!hasLot) {
             passFactor = SCrypt.scrypt(passphrase.getBytes("UTF8"), ownerSalt, 16384, 8, 8, 32);
         }
         else {
@@ -256,7 +257,6 @@ public class BIP38 {
             byte[] ownerEntropy = Arrays.copyOfRange(encryptedKey, 7, 15);
             byte[] tmp = Utils.concat(preFactor, ownerEntropy);
             passFactor = Utils.doubleHash(tmp, 0, 40);
-
         }
 
         byte[] addressHash = Arrays.copyOfRange(encryptedKey, 3, 7);
@@ -310,12 +310,29 @@ public class BIP38 {
      */
     public static String encryptNoEC(String passphrase, String encodedPrivateKey, boolean isCompressed)
             throws GeneralSecurityException, UnsupportedEncodingException, AddressFormatException {
+        return encryptNoEC(passphrase, encodedPrivateKey, isCompressed, MainNetParams.get());
+    }
 
-        DumpedPrivateKey dk = new DumpedPrivateKey(MainNetParams.get(), encodedPrivateKey);
+    /**
+     * Encrypts a key without using EC multiplication.
+     * @param encodedPrivateKey
+     * @param passphrase
+     * @param isCompressed
+     * @param params
+     * @return
+     * @throws GeneralSecurityException
+     * @throws UnsupportedEncodingException
+     * @throws AddressFormatException
+     */
+    public static String encryptNoEC(String passphrase, String encodedPrivateKey, boolean isCompressed, NetworkParameters params)
+            throws GeneralSecurityException, UnsupportedEncodingException, AddressFormatException {
 
-        ECKey key = dk.getKey();
-        byte[] keyBytes = key.getPrivKeyBytes();
-        String address = key.toAddress(MainNetParams.get()).toString();
+        DumpedPrivateKey dk = new DumpedPrivateKey(params, encodedPrivateKey);
+
+        ECKey ktmp = dk.getKey();
+        byte[] keyBytes = ktmp.getPrivKeyBytes();
+        ECKey key = new ECKey(new BigInteger(1, keyBytes), null, isCompressed);
+        String address = key.toAddress(params).toString();
         byte[] tmp = address.getBytes("ASCII");
         byte[] hash = Utils.doubleHash(tmp, 0, tmp.length);
         byte[] addressHash = Arrays.copyOfRange(hash, 0, 4);
@@ -347,7 +364,20 @@ public class BIP38 {
      * @throws UnsupportedEncodingException
      * @throws GeneralSecurityException
      */
-    public static String decryptNoEC(String passphrase, byte[] encryptedKey) throws UnsupportedEncodingException, GeneralSecurityException{
+    public static String decryptNoEC(String passphrase, byte[] encryptedKey) throws UnsupportedEncodingException, GeneralSecurityException {
+        return decryptNoEC(passphrase, encryptedKey, MainNetParams.get());
+    }
+
+    /**
+     * Decrypts a key that was encrypted without EC multiplication.
+     * @param passphrase
+     * @param encryptedKey
+     * @param params
+     * @return the key, Base58-encoded
+     * @throws UnsupportedEncodingException
+     * @throws GeneralSecurityException
+     */
+    public static String decryptNoEC(String passphrase, byte[] encryptedKey, NetworkParameters params) throws UnsupportedEncodingException, GeneralSecurityException {
 
         byte[] addressHash =  Arrays.copyOfRange(encryptedKey, 3, 7);
         byte[] scryptKey = SCrypt.scrypt(passphrase.getBytes("UTF8"), addressHash, 16384, 8, 8, 64);
@@ -366,15 +396,16 @@ public class BIP38 {
 
         boolean compressed = (encryptedKey[2] & (byte) 0x20) == 0x20;
         ECKey k = new ECKey(new BigInteger(1, keyBytes), null, compressed);
-        return k.getPrivateKeyEncoded(MainNetParams.get()).toString();
+        return k.getPrivateKeyEncoded(params).toString();
     }
 
     // command line encryption and decryption.
     public static void main(String args[]) throws Exception {
+
         switch(args.length) {
             case 3:
                 if (args[0].equals("-e")) {
-                    System.out.println(encryptNoEC(args[1], args[2], false));
+                    System.out.println(encryptNoEC(args[1], args[2], true));
                 }
                 else if (args[0].equals("-d")) {
                     System.out.println(decrypt(args[1], args[2]));

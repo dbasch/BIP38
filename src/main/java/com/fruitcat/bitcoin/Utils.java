@@ -17,12 +17,15 @@
 
 package com.fruitcat.bitcoin;
 
+import com.google.bitcoin.core.AddressFormatException;
 import com.google.bitcoin.core.Base58;
 import org.bouncycastle.math.ec.ECPoint;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.security.GeneralSecurityException;
 import java.security.Key;
 import java.security.MessageDigest;
@@ -123,6 +126,25 @@ public class Utils {
             }
         }
         return baos.toByteArray();
+    }
+
+    /**
+     * Gets the lot and sequence for a key (-1, -1 if not present)
+     * @param encryptedKey
+     * @return 4096 * lot + sequence
+     * @throws AddressFormatException
+     */
+    public static long getLotSequence(String encryptedKey) throws AddressFormatException {
+
+        long ret = -4097; //-1 lot, -1 sequence
+        byte[] keyBytes = Base58.decode(encryptedKey);
+        byte flagByte = keyBytes[2];
+        if ((flagByte & 4) == 4) {
+            ByteBuffer b = ByteBuffer.wrap(keyBytes, 11, 4);
+            b.order(ByteOrder.BIG_ENDIAN);
+            ret = (long) b.getInt() & 0xffffffffL;
+        }
+        return ret;
     }
 
     //for debugging
