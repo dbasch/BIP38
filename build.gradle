@@ -1,4 +1,7 @@
 apply plugin: 'java'
+apply plugin: 'application'
+
+mainClassName = 'com.fruitcat.bitcoin.BIP38'
 
 repositories {
       mavenCentral()
@@ -7,6 +10,13 @@ repositories {
       }
 }
 
+task fatJar(type: Jar) {
+    from files(sourceSets.main.output.classesDir)
+    from {configurations.compile.collect {zipTree(it)}} {
+        exclude "META-INF/*.SF"
+        exclude "META-INF/*.DSA"
+        exclude "META-INF/*.RSA"
+}
 
 dependencies {
   compile 'com.madgag:scprov-jdk15on:1.47.0.3'
@@ -21,5 +31,7 @@ test {
 
 }
 
-apply plugin:'application'
-mainClassName = 'com.fruitcat.bitcoin.BIP38'
+manifest {
+    attributes 'Main-Class': 'com.fruitcat.bitcoin.BIP38'
+   }
+}
